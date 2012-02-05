@@ -1,17 +1,19 @@
+var _ = require('underscore')
+
 // converts retarded magical arguments object to Array object
 function toArray(arg) { return Array.prototype.slice.call(arg) }
 
 // call callback if its defined.. I wrap all my callback calls in this to make callbacks optional
 exports.cb = function() {
     var args = toArray(arguments);
-    if (!args.length) { return }
     var f = args.shift()
+    if (!f) { return }
     f.apply(this,args)
 }
 
 
 // decorates a function
-exports.decorate = function (decorator, f) {
+var decorate = function (decorator, f) {
     return function() {
         var args = toArray(arguments)
         args.unshift(f)
@@ -19,11 +21,21 @@ exports.decorate = function (decorator, f) {
     }
 }
 
+exports.decorate = decorate;
+
 // converts a function that accepts single argument to a function that can accept an array and be called multiple times for each element
-exports.decorator_multiArg = function() {
+exports.multiArg = function() {
     var args = toArray(arguments);
     return _.map(args,args.shift());
 }
+
+// reverses arguments 
+exports.reverseArg = function() {
+    var args = toArray(arguments);
+    var f = args.shift()
+    f.apply(this,args.reverse())
+}
+
 
 // creates decorator which will delay the execution
 exports.MakeDecorator_delay = function(delay) {
@@ -34,19 +46,31 @@ exports.MakeDecorator_delay = function(delay) {
     }
 }
 
-// reverses arguments 
-exports.decorator_reverseArg = function() {
-    var args = toArray(arguments);
-    var f = args.shift()
-    f.apply(this,args.reverse())
-}
-
-
 // automatically retries the function execution if it fails..
-exports.decorator_retry = function() {
-    var args = toArray(arguments);
-    var f = args.shift()
-    _.asy
-    exports.make_decorator_delay(f,1000)
-    
+exports.MakeDecorator_retry = function(options) {
+    if (!options) { options = {} }
+
+    options = _.extend({
+        delay: 1000,
+        retries: 4
+    }, options)
+
+    return function() {
+        var args = toArray(arguments);
+        var f = args.shift()
+        var callback = args.pop()
+        
+        var cb = function(err,data) {
+            if ((!err) || (options.retries == 0 )) { callback(err,data); return }
+            setTimeout(call,options.delay)
+            options.delay += options.delay
+            options.retries -= 1
+        }
+
+        function call() { f(cb) }
+        call()
+    }
 }
+
+
+exports.retry = exports.MakeDecorator_retry()
