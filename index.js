@@ -79,11 +79,12 @@ exports.MakeDecorator_bindargs = function() {
     }
 }
 
-
-
-
 var bindargs = exports.bindargs = 
-    function(f,args) { return decorate(exports.MakeDecorator_bindargs.apply(this,args),f) }
+    function() { 
+        var args = toArray(arguments)
+        var f = args.shift()
+        return decorate(exports.MakeDecorator_bindargs.apply(this,args),f)
+    }
 
 
 // creates decorator which will delay the execution
@@ -109,12 +110,13 @@ exports.MakeDecorator_retry = function(options) {
 
     return function() {
         var args = toArray(arguments);
-        var f = args.shift()
+        var f = _.first(args)
+
         var callback = args.pop()
         
-        var cb = function(err,data) {
+        var checkcallback = function(err,data) {
             if ((!err) || (options.retries == 0 )) { callback(err,data); return }
-            if (options.failcall) { callback(err,data) }
+            if (options.failcall) { console.log('err!',err); callback(err,data) }
 
             if (options.fail) { options.fail(err,data)}
 
@@ -123,9 +125,8 @@ exports.MakeDecorator_retry = function(options) {
             options.retries -= 1
         }
         
-        args.push(cb)
-
-        var call = bindargs(f,args)
+        args.push(checkcallback)
+        var call = bindargs.apply(this,args)
         call()
     }
 }
