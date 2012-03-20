@@ -69,7 +69,6 @@ var bindcallback = exports.bindcallback = function() {
 */
 
 // will put sticky arguments to a function
-
 exports.MakeDecorator_bindargs = function() {
     var bindargs = toArray(arguments);
     return function() {
@@ -133,3 +132,56 @@ exports.MakeDecorator_retry = function(options) {
 
 
 exports.retry = exports.MakeDecorator_retry()
+
+
+
+
+// function decorated with this will have a 'cooldown' periond to avoid executing itself too frequently (defined by buffertime),
+exports.MakeDecorator_BurstLimit = function(buffertime) {
+    var data = { timeout: undefined, last: 0 }
+    return function() {
+        var self = this;
+        var now = new Date().getTime();
+        var args = toArray(arguments), f = args.shift();
+        
+        function runf() { 
+            data.last = new Date().getTime();
+            f.apply(self,args) 
+        }
+
+        var timediff = now - data.last
+
+        if ((timediff) > buffertime) {
+            runf(); return
+        }
+
+        // remove last 
+        if (data.timeout) { clearTimeout(data.timeout); data.timeout = undefined }
+        data.timeout = setTimeout ( runf, timediff)
+    }
+}
+
+// won't execute itself right away to see if aditional calls to it are received.
+// all the aditional calls will be supressed until the buffertime passes and the function gets executed
+//
+//  var render = decorate(MakeDecorator_BurstLimit2(500), function() {  ... })
+//
+exports.MakeDecorator_BurstLimit2 = function(buffertime) {
+    var data = { timeout: undefined, last: 0 }
+    return function() {
+        var self = this;
+        var now = new Date().getTime();
+        var args = toArray(arguments), f = args.shift();
+        
+        function runf() { 
+            data.timeout = undefined
+            data.last = new Date().getTime();
+            f.apply(self,args) 
+        }
+
+        if (!data.timeout) {
+            data.timeout = setTimeout ( runf, buffertime)
+        }            
+
+    }
+}
