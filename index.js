@@ -1,3 +1,4 @@
+
 var _ = require('underscore')
 
 // converts retarded magical arguments object to Array object
@@ -161,27 +162,185 @@ exports.MakeDecorator_BurstLimit = function(buffertime) {
     }
 }
 
+
+// receive functions and return a function that when gets called calls all those functions with its arguments
+//
+function joinf() {
+    var fs = toArray(arguments)
+    return function() {
+        var args = toArray(arguments)
+        _.map(fs, function(f) { f.apply(this,args) })
+    }
+}
+
+
+// accepts arguments array and a function, if arguments contain a callback, it joins it with a hook function, if not, it just appends a hook function
+// to arguments
+//
+function HookCallback(args,hook) {
+    if (_.last(args).constructor == Function) {
+        var originalcb = args.pop()
+        args.push(joinf(originalcb,hook))
+    } else {
+        args.push(hook)
+    }
+}
+
+
+
+
+
+// some metadecorators that don't map every functioncall directly to a functioncall of a target function (eg throttling decorators)
+// need a way to aggregate arguments from multiple calls to into one argument list,
+//
+// arghandler is an object that specifies an algo for this
+// zipArgHandler is a default sample implementation
+//
+// if you call:
+//
+// bla(1,2)
+// bla('a','b')
+//
+// after arghandler flush you'll get a call
+//
+// bla ([1,'a'],[2,'b'])
+//
+
+exports.zipArgHandler = function(arglength,checkcallback) {
+    this.arglength = arglength
+    this.checkcallback = checkcallback
+    this.reset()
+}
+
+exports.zipArgHandler.prototype.reset = function() {
+    var self = this;
+    this.args = [];
+    _.times(this.arglength, function(n) { self.args.push([]) })
+}
+
+exports.zipArgHandler.prototype.feed = function(array)  {
+    _.map(this.args, function(bucket,bucketnum) { bucket.push(array[bucketnum]) })
+}
+
+exports.zipArgHandler.prototype.length = function() {
+    return this.args[0].length
+}
+
+exports.zipArgHandler.prototype.flush = function() {
+    var args = this.args
+    this.reset()
+
+    if (this.checkcallback) {
+        // save some mem by filtering ones with clalbacks
+        var x = args.pop()
+        var callbacks = _.filter(x, function(arg) { return Boolean(arg) })
+        if (callbacks.length) {
+            args.push(function() {
+                var args = toArray(arguments)
+                _.map(callbacks, function(f) { if (f) { f.apply(this,args)} })
+            })
+        }
+        
+    }
+    return args
+}
+
+
+exports.LastArgHandler = function() {
+    this.args = []
+}
+
+exports.LastArgHandler.prototype.feed = function(args) {
+    this.args = args
+}
+
+exports.LastArgHandler.prototype.flush = function() {
+    return this.args
+    this.args = []
+}
+
+//
+// won't execute a target function until last execution of the target function is completed (expect a function to receive a callback)
+//
+exports.MakeDecorator_OneByOne = function(options) {
+    
+    if (!options) { options = {} }
+
+    var data = { active : false, cooldownTime: 30000, cooldownTimer: undefined }
+    
+    data = _.extend(data,options)
+
+    if (!data.arghandler) { data.arghandler = new exports.LastArgHandler() }
+
+    return function() {
+        var args = toArray(arguments), f = args.shift();
+
+        data.arghandler.feed(args)
+
+        function pump_it() {
+            data.active = true
+            
+            if (data.cooldownTime) { data.cooldownTimer = setTimeout( function () { data.active = false; pump_it() }, data.cooldownTime ) }
+
+            var call_args = data.arghandler.flush()
+            HookCallback(call_args, function() {
+                if (data.cooldownTimer) { clearTimeout(data.cooldownTimer); data.cooldownTimer = undefined }
+                data.active = false
+                if (data.arghandler.length()) {
+                    setTimeout(pump_it,0)
+                }
+            })
+
+            f.apply(this,call_args)
+        }
+
+        
+        if (!data.active) {
+            pump_it()
+        } 
+    }
+}
+
+
+
+
+//
 // won't execute itself right away to see if aditional calls to it are received.
 // all the aditional calls will be supressed until the buffertime passes and the function gets executed
 //
-//  var render = decorate(MakeDecorator_BurstLimit2(500), function() {  ... })
+//  var render = decorate(MakeDecorator_Throttle(500), function() {  ... })
 //
-exports.MakeDecorator_BurstLimit2 = function(buffertime) {
+exports.MakeDecorator_Throttle = function(options) {
+
+    if (!options) { options = {} }
     var data = { timeout: undefined, last: 0 }
+
+    data = _.extend(data,options)
+
+    if (!data.arghandler) { data.arghandler = new exports.LastArgHandler() }
+    if (!data.throttletime) { data.throttletime = 500 }
+
     return function() {
+
+        //console.log(x)
+
         var self = this;
         var now = new Date().getTime();
+        
         var args = toArray(arguments), f = args.shift();
         
-        function runf() { 
+        if (data.arghandler) { data.arghandler.feed(args) }
+        
+        function runf() {
             data.timeout = undefined
             data.last = new Date().getTime();
-            f.apply(self,args) 
+            if (data.arghandler) { f.apply(self,data.arghandler.flush()) } 
+            else {  f.call(self) }
         }
 
         if (!data.timeout) {
-            data.timeout = setTimeout ( runf, buffertime)
-        }            
-
+            data.timeout = setTimeout ( runf, data.throttletime)
+        }
     }
 }
+
