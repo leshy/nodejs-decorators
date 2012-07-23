@@ -302,6 +302,34 @@ exports.MakeDecorator_OneByOne = function(options) {
 }
 
 
+exports.MakeDecorator_Timeout = function (options) { 
+
+    if (!options) { options = {} }
+    if (!options.timeout) { options.timeout = 1000 }
+
+    return function () { 
+        var args = toArray(arguments), f = args.shift();
+        var callback
+        if (args.length()) {
+            if ((callback = args.pop()).constructor != Function) { throw "expected function as a callback, got something else" }
+            
+            var timeouted = false
+            var timeout = setTimeout(function() { 
+                timeouted = true
+                callback({ timeout: true })
+            }, options.timeout)
+
+            args.push(function() { 
+                if (timeouted) { return }
+                callback.apply(this,arguments) 
+            })
+            
+        } else { throw "expected function as a callback, got nothing" }
+
+        f.apply(this,args)
+    }
+}
+
 
 
 //
@@ -321,9 +349,9 @@ exports.MakeDecorator_Throttle = function(options) {
     if (!data.throttletime) { data.throttletime = 500 }
 
     return function() {
-
+        
         //console.log(x)
-
+        
         var self = this;
         var now = new Date().getTime();
         
@@ -337,7 +365,7 @@ exports.MakeDecorator_Throttle = function(options) {
             if (data.arghandler) { f.apply(self,data.arghandler.flush()) } 
             else {  f.call(self) }
         }
-
+        
         if (!data.timeout) {
             data.timeout = setTimeout ( runf, data.throttletime)
         }
