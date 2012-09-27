@@ -372,3 +372,12 @@ exports.MakeDecorator_Throttle = function(options) {
     }
 }
 
+exports.MakeObjReceiver = function(objclass) {
+    return function() {
+        var args = toArray(arguments);
+        var f = args.shift();
+        if ((!args.length) || (!args[0])) { f.apply(this,[]); return }
+        if (args[0].constructor != objclass) { args[0] = new objclass(args[0]) }
+        return f.apply(this,args)
+    }
+}
