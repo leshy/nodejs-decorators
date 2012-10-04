@@ -103,7 +103,7 @@ exports.MakeDecorator_retry = function(options) {
         delay: 1000,
         retries: 3,
         fail: undefined, // special callback for failiures
-        failcall: false // call callback on each execution, not only on success?
+        failcall: false, // call callback on each execution, not only on success?
         delaymodifier: function (x) { return x + x } // each retry can change the delay time
     }, options)
 
