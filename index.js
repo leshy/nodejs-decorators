@@ -1,4 +1,3 @@
-
 var _ = require('underscore')
 
 // converts retarded magical arguments object to Array object
@@ -105,7 +104,7 @@ exports.MakeDecorator_retry = function(options) {
         retries: 3,
         fail: undefined, // special callback for failiures
         failcall: false // call callback on each execution, not only on success?
-        
+        delaymodifier: function (x) { return x + x } // each retry can change the delay time
     }, options)
 
     return function() {
@@ -121,7 +120,7 @@ exports.MakeDecorator_retry = function(options) {
             if (options.fail) { options.fail(err,data)}
 
             setTimeout(call,options.delay)
-            options.delay += options.delay
+            options.delay = options.delaymodifier(options.delay)
             options.retries -= 1
         }
         
@@ -133,34 +132,6 @@ exports.MakeDecorator_retry = function(options) {
 
 
 exports.retry = exports.MakeDecorator_retry()
-
-
-
-
-// function decorated with this will have a 'cooldown' periond to avoid executing itself too frequently (defined by buffertime),
-exports.MakeDecorator_BurstLimit = function(buffertime) {
-    var data = { timeout: undefined, last: 0 }
-    return function() {
-        var self = this;
-        var now = new Date().getTime();
-        var args = toArray(arguments), f = args.shift();
-        
-        function runf() { 
-            data.last = new Date().getTime();
-            f.apply(self,args) 
-        }
-
-        var timediff = now - data.last
-
-        if ((timediff) > buffertime) {
-            runf(); return
-        }
-
-        // remove last 
-        if (data.timeout) { clearTimeout(data.timeout); data.timeout = undefined }
-        data.timeout = setTimeout ( runf, timediff)
-    }
-}
 
 
 // receive functions and return a function that when gets called calls all those functions with its arguments
@@ -259,16 +230,24 @@ exports.LastArgHandler.prototype.flush = function() {
     this.args = []
 }
 
+
+// onebyone and throttle decorators should use the same code
+
+
 //
 // won't execute a target function until last execution of the target function is completed (expect a function to receive a callback)
+// it can add an optional wait between first function returning and second being executed
+//
+// this decorator uses arghandlers (check above)
 //
 exports.MakeDecorator_OneByOne = function(options) {
     
     if (!options) { options = {} }
-
-    var data = { active : false, cooldownTime: 30000, cooldownTimer: undefined }
     
-    data = _.extend(data,options)
+    data = _.extend({ active : false, 
+                      cooldownTime: 30000, 
+                      cooldownTimer: undefined 
+                    },options)
 
     if (!data.arghandler) { data.arghandler = new exports.LastArgHandler() }
 
@@ -293,7 +272,6 @@ exports.MakeDecorator_OneByOne = function(options) {
 
             f.apply(this,call_args)
         }
-
         
         if (!data.active) {
             pump_it()
@@ -302,40 +280,12 @@ exports.MakeDecorator_OneByOne = function(options) {
 }
 
 
-exports.MakeDecorator_Timeout = function (options) { 
-
-    if (!options) { options = {} }
-    if (!options.timeout) { options.timeout = 1000 }
-
-    return function () { 
-        var args = toArray(arguments), f = args.shift();
-        var callback
-        if (args.length()) {
-            if ((callback = args.pop()).constructor != Function) { throw "expected function as a callback, got something else" }
-            
-            var timeouted = false
-            var timeout = setTimeout(function() { 
-                timeouted = true
-                callback({ timeout: true })
-            }, options.timeout)
-
-            args.push(function() { 
-                if (timeouted) { return }
-                callback.apply(this,arguments) 
-            })
-            
-        } else { throw "expected function as a callback, got nothing" }
-
-        f.apply(this,args)
-    }
-}
-
-
-
 //
 // won't execute itself right away to see if aditional calls to it are received.
 // all the aditional calls will be supressed until the buffertime passes and the function gets executed
 //
+// this decorator uses arghandlers (check above)
+// 
 //  var render = decorate(MakeDecorator_Throttle(500), function() {  ... })
 //
 exports.MakeDecorator_Throttle = function(options) {
@@ -371,6 +321,40 @@ exports.MakeDecorator_Throttle = function(options) {
         }
     }
 }
+
+
+
+// defines timeout for a function, if timeout is triggered before the function returns,
+// callback will be called with an error object
+exports.MakeDecorator_Timeout = function (options) { 
+
+    if (!options) { options = {} }
+    if (!options.timeout) { options.timeout = 1000 }
+
+    return function () { 
+        var args = toArray(arguments), f = args.shift();
+        var callback
+        if (args.length()) {
+            if ((callback = args.pop()).constructor != Function) { throw "expected function as a callback, got something else" }
+            
+            var timeouted = false
+            var timeout = setTimeout(function() { 
+                timeouted = true
+                callback({ timeout: true })
+            }, options.timeout)
+
+            args.push(function() { 
+                if (timeouted) { return }
+                callback.apply(this,arguments) 
+            })
+            
+        } else { throw "expected function as a callback, got nothing" }
+
+        f.apply(this,args)
+    }
+}
+
+
 
 exports.MakeObjReceiver = function(objclass) {
     return function() {
