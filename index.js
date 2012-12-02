@@ -289,31 +289,27 @@ exports.MakeDecorator_OneByOne = function(options) {
 //  var render = decorate(MakeDecorator_Throttle(500), function() {  ... })
 //
 exports.MakeDecorator_Throttle = function(options) {
-
+    
     if (!options) { options = {} }
     var data = { timeout: undefined, last: 0 }
-
+    
     data = _.extend(data,options)
-
+    
     if (!data.arghandler) { data.arghandler = new exports.LastArgHandler() }
     if (!data.throttletime) { data.throttletime = 500 }
 
     return function() {
-        
-        //console.log(x)
-        
         var self = this;
         var now = new Date().getTime();
-        
         var args = toArray(arguments), f = args.shift();
-        
+
         if (data.arghandler) { data.arghandler.feed(args) }
         
         function runf() {
             data.timeout = undefined
             data.last = new Date().getTime();
             if (data.arghandler) { f.apply(self,data.arghandler.flush()) } 
-            else {  f.call(self) }
+            else {  f.apply(self,args) }
         }
         
         if (!data.timeout) {
