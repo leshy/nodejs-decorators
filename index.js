@@ -159,11 +159,13 @@ function HookCallback(args,hook) {
 }
 
 
-// this one allows only one instance of function with a particular argument group to be executing... 
-// super ugly implementation, should be abstracted to accept a comparison function for arguments
+// this one allows only one instance of function with a particular argument group to be executing.
+// super ugly implementation that's using JSON instead of copy, 
+// should be abstracted to accept a comparison function for arguments
+
 exports.MakeDecorator_OneArg = function() {
     
-    var executing = []
+    var executing = {}
 
     return function() {
         var self = this;
@@ -172,16 +174,16 @@ exports.MakeDecorator_OneArg = function() {
         
         if (_.last(args) && _.last(args).constructor == Function) { callback = args.pop() }
 
-        var execargs = _.clone(args)
+        var execargs = JSON.stringify(args)
         
-        if (_.find(executing, function (a) { return a == execargs })) {
-            if (callback) { callback('one of those is alerady running'); return }
+        if (executing[execargs]) {
+            return
         }
         
-        executing.push(execargs)
+        executing[execargs] = true
 
         args.push(function () {
-            executing = _.filter(executing,function (a) { a != execargs })
+            delete executing[execargs]
             if (callback) { callback.apply(this,arguments) }
         })
 
