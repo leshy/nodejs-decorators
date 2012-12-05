@@ -47,6 +47,7 @@ exports.reverseArg = function() {
     var f = args.shift()
     f.apply(this,args.reverse())
 }
+
 /*
 // accepts callbacks that will be called in parallel with that a functions normal callback
 exports.MakeDecorator_bindcallback = function() {
@@ -158,6 +159,35 @@ function HookCallback(args,hook) {
 }
 
 
+// this one allows only one instance of function with a particular argument group to be executing... 
+// super ugly implementation, should be abstracted to accept a comparison function for arguments
+exports.MakeDecorator_OneArg = function() {
+    
+    var executing = []
+
+    return function() {
+        var self = this;
+        var args = toArray(arguments), f = args.shift();
+
+        
+        if (_.last(args) && _.last(args).constructor == Function) { callback = args.pop() }
+
+        var execargs = _.clone(args)
+        
+        if (_.find(executing, function (a) { return a == execargs })) {
+            if (callback) { callback('one of those is alerady running'); return }
+        }
+        
+        executing.push(execargs)
+
+        args.push(function () {
+            executing = _.filter(executing,function (a) { a != execargs })
+            if (callback) { callback.apply(this,arguments) }
+        })
+
+        f.apply(this,args)
+    }
+}
 
 
 
@@ -231,6 +261,10 @@ exports.LastArgHandler.prototype.flush = function() {
 }
 
 
+
+
+
+
 // onebyone and throttle decorators should use the same code
 
 
@@ -291,12 +325,12 @@ exports.MakeDecorator_OneByOne = function(options) {
 exports.MakeDecorator_Throttle = function(options) {
     
     if (!options) { options = {} }
-    var data = { timeout: undefined, last: 0 }
+    var data = { t: undefined }
     
     data = _.extend(data,options)
     
     if (!data.arghandler) { data.arghandler = new exports.LastArgHandler() }
-    if (!data.throttletime) { data.throttletime = 500 }
+    if (!data.timeout) { data.timeout = 500 }
 
     return function() {
         var self = this;
@@ -304,16 +338,16 @@ exports.MakeDecorator_Throttle = function(options) {
         var args = toArray(arguments), f = args.shift();
 
         if (data.arghandler) { data.arghandler.feed(args) }
-        
+
         function runf() {
-            data.timeout = undefined
-            data.last = new Date().getTime();
+            data.t = undefined
+            
             if (data.arghandler) { f.apply(self,data.arghandler.flush()) } 
             else {  f.apply(self,args) }
         }
         
-        if (!data.timeout) {
-            data.timeout = setTimeout ( runf, data.throttletime)
+        if (!data.t) {
+            data.t = setTimeout ( runf, data.timeout)
         }
     }
 }
