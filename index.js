@@ -397,3 +397,4 @@ exports.MakeObjReceiver = function(objclass) {
         return f.apply(this,args)
     }
 }
+
