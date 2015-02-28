@@ -1,7 +1,7 @@
 {
   "name": "decorators",
   "version": "0.0.1",
-  "description": "js decorators",
+  "description": "python like decorators",
   "keywords": [
     "decorators"
   ],
@@ -11,6 +11,10 @@
   },
   "dependencies": {
     "underscore": "1.x"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/leshy/decorators.git"
   },
   "main": "index.js"
 }
